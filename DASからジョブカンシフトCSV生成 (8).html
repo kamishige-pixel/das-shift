@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DAS → ジョブカン シフトCSV生成</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#f5f4f0;--surface:#fff;--border:#e2e0da;--border-strong:#c8c5bc;
+  --text:#1a1916;--text-sub:#6b6860;--text-hint:#9e9b94;--accent:#1a1916;
+  --green-bg:#f0faf4;--green-text:#1a7a42;--green-border:#b6e8c8;
+  --amber-bg:#fffbea;--amber-text:#9a6700;--amber-border:#f5e4a0;
+  --red-bg:#fff1f0;--red-text:#c0392b;
+  --blue-bg:#eaf3fb;--blue-text:#1a5fa0;--blue-border:#b5d4f4;
+  --r:10px;
+}
+body{font-family:'Noto Sans JP',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;font-size:14px;}
+header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 2rem;height:56px;display:flex;align-items:center;gap:12px;position:sticky;top:0;z-index:100;}
+header h1{font-size:15px;font-weight:700;}
+.tag{font-size:11px;background:var(--accent);color:#fff;padding:2px 10px;border-radius:20px;}
+.today{margin-left:auto;font-size:12px;color:var(--text-sub);background:var(--bg);border:1px solid var(--border);padding:3px 12px;border-radius:20px;}
+.main{max-width:900px;margin:0 auto;padding:2rem 1.5rem;}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:1.5rem;margin-bottom:1.25rem;}
+.card-head{display:flex;align-items:center;gap:12px;margin-bottom:1rem;}
+.num{width:28px;height:28px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.card-title{font-size:15px;font-weight:700;}
+.card-sub{font-size:12px;color:var(--text-sub);margin-top:2px;}
+
+.dropzone{border:2px dashed var(--border-strong);border-radius:8px;padding:1.5rem;text-align:center;cursor:pointer;background:var(--bg);transition:all .15s;}
+.dropzone:hover,.dropzone.over{border-color:var(--accent);background:#f0efeb;}
+.dropzone p{font-size:13px;font-weight:700;margin-bottom:4px;}
+.dropzone small{font-size:11px;color:var(--text-sub);}
+
+.file-list{margin-top:10px;display:flex;flex-direction:column;gap:6px;}
+.fitem{display:flex;align-items:center;gap:8px;background:var(--green-bg);border:1px solid var(--green-border);border-radius:6px;padding:7px 12px;font-size:12px;}
+.fitem-name{color:var(--green-text);font-weight:700;flex:1;}
+.fitem-info{color:var(--text-sub);}
+.fitem-del{background:none;border:none;cursor:pointer;color:var(--text-hint);font-size:18px;line-height:1;padding:0 2px;}
+.fitem-del:hover{color:var(--red-text);}
+
+.quick-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;}
+.qbtn{padding:6px 14px;border-radius:20px;border:1px solid var(--border);background:var(--surface);font-family:inherit;font-size:13px;cursor:pointer;color:var(--text-sub);transition:all .15s;}
+.qbtn:hover{border-color:var(--border-strong);color:var(--text);}
+.qbtn.sel{background:var(--accent);color:#fff;border-color:var(--accent);}
+.qbtn.hi{background:var(--blue-bg);color:var(--blue-text);border-color:var(--blue-border);font-weight:700;}
+.qbtn.hi:hover{background:var(--blue-text);color:#fff;}
+
+.period-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;}
+.field{display:flex;flex-direction:column;gap:4px;}
+.field label{font-size:11px;color:var(--text-sub);font-weight:500;}
+.field select,.field input[type=number]{border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-family:inherit;font-size:13px;background:var(--surface);color:var(--text);outline:none;}
+.field select:focus,.field input:focus{border-color:var(--border-strong);}
+
+.genbtn{width:100%;padding:13px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:inherit;font-size:15px;font-weight:700;cursor:pointer;transition:opacity .15s;}
+.genbtn:hover{opacity:.85;}
+.genbtn:disabled{opacity:.4;cursor:not-allowed;}
+
+.log{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:.75rem 1rem;font-size:12px;line-height:1.9;color:var(--text-sub);max-height:160px;overflow-y:auto;font-family:monospace;margin-top:1rem;}
+.log .ok{color:var(--green-text);}
+.log .warn{color:var(--amber-text);}
+.log .err{color:var(--red-text);}
+
+.result{background:var(--green-bg);border:1px solid var(--green-border);border-radius:var(--r);padding:1.25rem;margin-bottom:1.25rem;}
+.result h3{font-size:15px;font-weight:700;color:var(--green-text);margin-bottom:12px;}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px;}
+.stat{background:var(--surface);border-radius:8px;padding:.75rem 1rem;text-align:center;}
+.stat-v{font-size:22px;font-weight:700;}
+.stat-l{font-size:11px;color:var(--text-sub);margin-top:2px;}
+.dlbtn{display:block;width:100%;padding:11px;border-radius:8px;border:none;background:var(--green-text);color:#fff;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;}
+.dlbtn:hover{opacity:.85;}
+.warnbox{background:var(--amber-bg);border:1px solid var(--amber-border);border-radius:8px;padding:1rem;margin-top:10px;font-size:12px;color:var(--amber-text);}
+.warnbox ul{padding-left:1.2rem;margin-top:4px;line-height:1.8;}
+</style>
+</head>
+<body>
+<header>
+  <h1>DAS → ジョブカン シフトCSV生成</h1>
+  <span class="tag">全拠点対応</span>
+  <span class="today" id="todayLabel"></span>
+</header>
+<div class="main">
+
+  <div class="card">
+    <div class="card-head">
+      <div class="num">1</div>
+      <div><div class="card-title">DASファイルをアップロード</div><div class="card-sub">複数拠点のxlsmを同時にドロップできます</div></div>
+    </div>
+    <div class="dropzone" id="dz">
+      <p>DAS xlsmファイルをここにドロップ</p>
+      <small>クリックしてファイルを選択することもできます</small>
+    </div>
+    <input type="file" id="fi" accept=".xlsm,.xlsx" multiple style="display:none">
+    <div class="file-list" id="flist"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="num">2</div>
+      <div><div class="card-title">出力期間を選択</div><div class="card-sub">毎日運用なら「今日」「明日」がワンクリック</div></div>
+    </div>
+    <div class="quick-row">
+      <button class="qbtn hi" id="q-today" onclick="setQuick('today',this)">今日</button>
+      <button class="qbtn hi" id="q-tomorrow" onclick="setQuick('tomorrow',this)">明日</button>
+      <button class="qbtn" onclick="setQuick('1-10',this)">月初〜10日</button>
+      <button class="qbtn" onclick="setQuick('11-20',this)">11〜20日</button>
+      <button class="qbtn" onclick="setQuick('21-end',this)">21日〜月末</button>
+      <button class="qbtn" onclick="setQuick('1-end',this)">月全体</button>
+    </div>
+    <div class="period-row">
+      <div class="field"><label>年</label><input type="number" id="year" value="2026" min="2020" max="2040" style="width:80px" oninput="initDays()"></div>
+      <div class="field"><label>月</label>
+        <select id="month" onchange="initDays()">
+          <option>1</option><option>2</option><option>3</option><option>4</option>
+          <option>5</option><option>6</option><option>7</option><option>8</option>
+          <option>9</option><option>10</option><option>11</option><option>12</option>
+        </select>
+      </div>
+      <div class="field"><label>開始日</label><select id="sd" style="width:70px"></select></div>
+      <div class="field"><label>終了日</label><select id="ed" style="width:70px"></select></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="num">3</div>
+      <div><div class="card-title">CSV生成 → ダウンロード</div><div class="card-sub">全拠点まとめて1ファイルで出力</div></div>
+    </div>
+    <button class="genbtn" id="genbtn" onclick="doGenerate()" disabled>DASファイルをアップロードしてください</button>
+    <div class="log" id="log" style="display:none"></div>
+  </div>
+
+  <div id="resultArea" style="display:none">
+    <div class="result">
+      <h3>✓ CSV生成完了</h3>
+      <div class="stats">
+        <div class="stat"><div class="stat-v" id="sv1">-</div><div class="stat-l">拠点数</div></div>
+        <div class="stat"><div class="stat-v" id="sv2">-</div><div class="stat-l">スタッフ数</div></div>
+        <div class="stat"><div class="stat-v" id="sv3">-</div><div class="stat-l">シフト行数</div></div>
+        <div class="stat"><div class="stat-v" id="sv4">-</div><div class="stat-l">対象日数</div></div>
+      </div>
+      <button class="dlbtn" onclick="doDownload()">ジョブカン用CSVをダウンロード</button>
+    </div>
+    <div id="warnArea"></div>
+  </div>
+
+</div>
+<script>
+// =====================
+// 定数
+// =====================
+const SHIFT_MAP = {
+  // 通常シフト
+  'D':'91','A':'93','B':'9B','F8':'B1','F':'F','H':'H1','S':'S',
+  // 有給使用日 → シフトコードを入れる（有休はジョブカンで別途インポート）
+  'D有':'91','A有':'93','B有':'9B','F8有':'B1','F有':'F','H有':'H1','S有':'S',
+  // 全休・公休 → シフトなし
+  '有':'-','有給':'-','-':'-','公休':'-'
+};
+
+// =====================
+// 状態
+// =====================
+let files = [];   // [{name, year, month, staff:[{name,repid,shifts:{1:'F',2:'H',...}}]}]
+let csvOut = '';
+
+// =====================
+// 初期化
+// =====================
+(function init() {
+  const now = new Date();
+  document.getElementById('todayLabel').textContent =
+    `${now.getFullYear()}年${now.getMonth()+1}月${now.getDate()}日（${'日月火水木金土'[now.getDay()]}）`;
+  document.getElementById('month').value = now.getMonth() + 1;
+  document.getElementById('year').value = now.getFullYear();
+  initDays();
+
+  // ドロップゾーン
+  const dz = document.getElementById('dz');
+  const fi = document.getElementById('fi');
+  dz.addEventListener('click', () => fi.click());
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+  dz.addEventListener('drop', e => {
+    e.preventDefault(); dz.classList.remove('over');
+    if (e.dataTransfer.files.length) handleFiles(Array.from(e.dataTransfer.files));
+  });
+  fi.addEventListener('change', e => {
+    if (e.target.files.length) { handleFiles(Array.from(e.target.files)); fi.value = ''; }
+  });
+})();
+
+// =====================
+// 日付
+// =====================
+function initDays() {
+  const y = parseInt(document.getElementById('year').value);
+  const m = parseInt(document.getElementById('month').value);
+  const last = new Date(y, m, 0).getDate();
+  for (const id of ['sd','ed']) {
+    const sel = document.getElementById(id);
+    const prev = parseInt(sel.value);
+    sel.innerHTML = '';
+    for (let i = 1; i <= last; i++) sel.innerHTML += `<option value="${i}">${i}日</option>`;
+    sel.value = (prev >= 1 && prev <= last) ? prev : (id === 'sd' ? 1 : last);
+  }
+}
+
+function setQuick(type, btn) {
+  document.querySelectorAll('.qbtn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  const now = new Date();
+  const tom = new Date(now); tom.setDate(now.getDate() + 1);
+  const y = parseInt(document.getElementById('year').value);
+  const m = parseInt(document.getElementById('month').value);
+  const last = new Date(y, m, 0).getDate();
+  if (type === 'today') {
+    document.getElementById('year').value = now.getFullYear();
+    document.getElementById('month').value = now.getMonth() + 1;
+    initDays();
+    document.getElementById('sd').value = now.getDate();
+    document.getElementById('ed').value = now.getDate();
+  } else if (type === 'tomorrow') {
+    document.getElementById('year').value = tom.getFullYear();
+    document.getElementById('month').value = tom.getMonth() + 1;
+    initDays();
+    document.getElementById('sd').value = tom.getDate();
+    document.getElementById('ed').value = tom.getDate();
+  } else {
+    if (type === '1-10')   { document.getElementById('sd').value = 1;  document.getElementById('ed').value = 10; }
+    if (type === '11-20')  { document.getElementById('sd').value = 11; document.getElementById('ed').value = 20; }
+    if (type === '21-end') { document.getElementById('sd').value = 21; document.getElementById('ed').value = last; }
+    if (type === '1-end')  { document.getElementById('sd').value = 1;  document.getElementById('ed').value = last; }
+  }
+}
+
+// =====================
+// ファイル処理
+// =====================
+async function handleFiles(fileList) {
+  showLog();
+  for (const f of fileList) {
+    if (files.find(x => x.name === f.name)) { log('⚠ ' + f.name + ' は既に読み込み済みです', 'warn'); continue; }
+    const data = await parseFile(f);
+    if (data) { files.push(data); renderFileList(); updateBtn(); }
+  }
+}
+
+async function parseFile(file) {
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+
+    if (!wb.SheetNames.includes('シフト'))   { log('✗ ' + file.name + '：「シフト」シートがありません', 'err'); return null; }
+    if (!wb.SheetNames.includes('CMマスタ')) { log('✗ ' + file.name + '：「CMマスタ」シートがありません', 'err'); return null; }
+
+    // CMマスタ → 氏名:REPID マップ
+    const cmData = XLSX.utils.sheet_to_json(wb.Sheets['CMマスタ'], { header: 1, defval: null });
+    const repMap = {};
+    let repCol = -1;
+    for (const row of cmData) {
+      if (repCol < 0) {
+        const i = (row || []).indexOf('REPID');
+        if (i >= 0) { repCol = i; continue; }
+      }
+      if (repCol >= 0 && row && row[0] && typeof row[0] === 'string') {
+        const nm = row[0].replace(/\s+/g, '　').trim();
+        if (nm && row[repCol] != null) repMap[nm] = String(row[repCol]);
+      }
+    }
+
+    // シフトシート
+    const shData = XLSX.utils.sheet_to_json(wb.Sheets['シフト'], { header: 1, defval: null });
+
+    // ヘッダー行検索（稼働時間帯 / 氏名）
+    let hRow = -1;
+    for (let i = 0; i < shData.length; i++) {
+      if (shData[i] && shData[i][0] === '稼働時間帯' && shData[i][1] === '氏名') { hRow = i; break; }
+    }
+    if (hRow < 0) { log('✗ ' + file.name + '：シフトシートのヘッダーが見つかりません', 'err'); return null; }
+
+    // 年月検出（col4 = 1日）
+    const h4 = shData[hRow][4];
+    let year = null, month = null;
+    if (h4 instanceof Date) {
+      year = h4.getFullYear(); month = h4.getMonth() + 1;
+    } else if (typeof h4 === 'number' && h4 > 40000) {
+      const d = new Date(Math.round((h4 - 25569) * 86400 * 1000));
+      year = d.getUTCFullYear(); month = d.getUTCMonth() + 1;
+    }
+
+    // スタッフ読み込み（col4=1日〜col34=31日 固定）
+    const staff = [];
+    let noRepid = 0;
+    for (let i = hRow + 2; i < shData.length; i++) {
+      const row = shData[i];
+      if (!row || !row[1] || typeof row[1] !== 'string') continue;
+      const nm = row[1].replace(/\s+/g, '　').trim();
+      if (!nm) continue;
+      const repid = repMap[nm] || '';
+      if (!repid) noRepid++;
+      const shifts = {};
+      for (let c = 4; c <= 34; c++) {
+        const day = c - 3;
+        const val = row[c];
+        if (val != null && val !== '') shifts[day] = String(val).trim();
+      }
+      staff.push({ name: nm, repid, shifts });
+    }
+
+    if (noRepid > 0) log('⚠ ' + file.name + '：REPID未設定 ' + noRepid + '名', 'warn');
+    log('✓ ' + file.name + '：' + staff.length + '名・' + year + '年' + month + '月', 'ok');
+
+    // 1ファイル目なら年月を自動セット
+    if (files.length === 0 && year && month) {
+      document.getElementById('year').value = year;
+      document.getElementById('month').value = month;
+      initDays();
+      document.getElementById('ed').value = new Date(year, month, 0).getDate();
+    }
+
+    return { name: file.name, year, month, staff };
+  } catch(e) {
+    log('✗ ' + file.name + '：エラー（' + e.message + '）', 'err');
+    return null;
+  }
+}
+
+function removeFile(name) {
+  files = files.filter(f => f.name !== name);
+  renderFileList(); updateBtn();
+  log('削除：' + name);
+}
+
+function renderFileList() {
+  document.getElementById('flist').innerHTML = files.map(f =>
+    '<div class="fitem">' +
+    '<span class="fitem-name">' + f.name + '</span>' +
+    '<span class="fitem-info">' + f.year + '年' + f.month + '月・' + f.staff.length + '名</span>' +
+    '<button class="fitem-del" onclick="removeFile(\'' + f.name.replace(/'/g,"\\'") + '\')">×</button>' +
+    '</div>'
+  ).join('');
+}
+
+function updateBtn() {
+  const btn = document.getElementById('genbtn');
+  if (files.length === 0) { btn.disabled = true; btn.textContent = 'DASファイルをアップロードしてください'; }
+  else { btn.disabled = false; btn.textContent = files.length + '拠点のシフトCSVを生成する'; }
+}
+
+// =====================
+// ログ
+// =====================
+function showLog() { document.getElementById('log').style.display = ''; }
+function log(msg, type) {
+  showLog();
+  const el = document.getElementById('log');
+  const d = document.createElement('div');
+  d.className = type || '';
+  d.textContent = msg;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+// =====================
+// CSV生成
+// =====================
+function doGenerate() {
+  if (files.length === 0) return;
+  document.getElementById('log').innerHTML = '';
+  showLog();
+  document.getElementById('resultArea').style.display = 'none';
+  csvOut = '';
+
+  try {
+    const year  = parseInt(document.getElementById('year').value);
+    const month = parseInt(document.getElementById('month').value);
+    const sd    = parseInt(document.getElementById('sd').value);
+    const ed    = parseInt(document.getElementById('ed').value);
+    const last  = new Date(year, month, 0).getDate();
+    const days  = ed - sd + 1;
+
+    log('対象期間：' + year + '年' + month + '月' + sd + '日〜' + ed + '日（' + days + '日分）');
+
+    const rows = [['スタッフコード（必須）',...Array.from({length:31},(_,i)=>i+1)]];
+    const warns = [];
+    const unknowns = new Set();
+    let totalStaff = 0, totalShifts = 0;
+
+    for (const fd of files) {
+      let cnt = 0;
+      for (const s of fd.staff) {
+        const row = [s.repid];
+        let has = false;
+        for (let d = 1; d <= 31; d++) {
+          if (d < sd || d > ed || d > last) { row.push('-'); continue; }
+          const raw = s.shifts[d];
+          if (!raw) { row.push('-'); continue; }
+          // 全角→半角正規化
+          const norm = raw.replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0)).trim();
+          const mapped = (SHIFT_MAP[raw] !== undefined) ? SHIFT_MAP[raw] : SHIFT_MAP[norm];
+          if (mapped === undefined) {
+            unknowns.add(raw);
+            warns.push(s.name + ' ' + month + '/' + d + '：未知「' + raw + '」');
+            row.push('');
+          } else {
+            row.push(mapped);
+            has = true; totalShifts++;
+          }
+        }
+        if (has) { rows.push(row); cnt++; totalStaff++; }
+      }
+      log('✓ ' + fd.name + '：' + cnt + '名を出力', 'ok');
+    }
+
+    if (unknowns.size > 0) log('⚠ 未知の記号：' + [...unknowns].join('、'), 'warn');
+    if (files.some(f => f.staff.some(s => !s.repid))) log('⚠ REPIDが空欄のスタッフがいます', 'warn');
+
+    csvOut = '\uFEFF' + rows.map(r => r.map(c => '"' + String(c||'').replace(/"/g,'""') + '"').join(',')).join('\r\n');
+
+    document.getElementById('sv1').textContent = files.length;
+    document.getElementById('sv2').textContent = totalStaff;
+    document.getElementById('sv3').textContent = totalShifts;
+    document.getElementById('sv4').textContent = days;
+    document.getElementById('resultArea').style.display = '';
+
+    if (warns.length > 0) {
+      document.getElementById('warnArea').innerHTML =
+        '<div class="warnbox"><strong>⚠ 未知のシフト記号（要確認）</strong><ul>' +
+        warns.slice(0,30).map(w=>'<li>'+w+'</li>').join('') +
+        (warns.length>30?'<li>他'+(warns.length-30)+'件</li>':'') +
+        '</ul></div>';
+    } else {
+      document.getElementById('warnArea').innerHTML = '';
+    }
+
+  } catch(e) {
+    log('エラーが発生しました：' + e.message, 'err');
+  }
+}
+
+// =====================
+// ダウンロード
+// =====================
+function doDownload() {
+  if (!csvOut) return;
+  const y  = document.getElementById('year').value;
+  const m  = String(document.getElementById('month').value).padStart(2,'0');
+  const s  = String(document.getElementById('sd').value).padStart(2,'0');
+  const e  = String(document.getElementById('ed').value).padStart(2,'0');
+  const fn = s === e ? 'jobcan_shift_'+y+m+s+'.csv' : 'jobcan_shift_'+y+m+'_'+s+'-'+e+'.csv';
+  const a  = document.createElement('a');
+  a.href   = URL.createObjectURL(new Blob([csvOut], {type:'text/csv'}));
+  a.download = fn;
+  a.click();
+}
+</script>
+</body>
+</html>
